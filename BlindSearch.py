@@ -6,9 +6,9 @@ from sklearn import metrics
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
+from sklearn.neighbors import KNeighborsRegressor 
 from sklearn import svm
-
-
+    
 def gridSVR(X_train,Y_train,X_val,Y_val):
 
     C_r = range(8,10)
@@ -117,8 +117,28 @@ def gridMLP(X_train,Y_train,X_val,Y_val):
     
     return (best_model, best_predicts, best_erro, best_param)
                         
-                        
-    
 
-    
+def gridKN(X_train,Y_train,X_val,Y_val):
+
+    n_neighbors = np.linspace(1,10,10)
+    weights = ['uniform','distance']
+        
+    best_erro = 999999999
+
+    for ngh in n_neighbors:
+        for w in weights:
+            kn = KNeighborsRegressor(n_neighbors = ngh, weights = w, algorithm = 'auto', p = 2)
+            kn.fit(X_train,Y_train)
+
+            predict = kn.predict(X_val)
+            erro = metrics.mean_squared_error(Y_val, predict)
+
+            if erro < best_erro:
+
+                best_erro = erro
+                best_model = kn
+                best_param = (ngh, w)
+                best_predicts = predict
+
+    return (best_model, best_predicts, best_erro, best_param)
 

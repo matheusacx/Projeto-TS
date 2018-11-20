@@ -5,23 +5,18 @@ Created on Tue Nov 20 02:23:47 2018
 @author: mathe
 """
 
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn.metrics as metrics
-import BlindSearch as bs
-
-from sklearn.neural_network import MLPRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn import svm
+import BlindSearch as bs 
 
 """
  - Modelos utilizados:
      
      - MLP
-     - RandomForest
-     - SVR
+     - AutoRegressivo
+     - Kneighbors
 """
 
 def esperaenter():
@@ -33,7 +28,6 @@ def processdata(datafile,dimension, valid = True):
     serie = pd.Series(data)
     laggedata = pd.concat([serie.shift(i) for i in range(dimension+1)],axis=1 )
 
-    
     if valid == False: 
         
         #Treinamento 80%
@@ -80,8 +74,11 @@ def createmodel(trainset,traintarget,valset,valtarget, opmodel):
     if opmodel == 'SVR':
         (best_model, best_predicts, best_erro, best_param) = bs.gridSVR(trainset,traintarget,valset,valtarget)
         return best_model
+
+    if opmodel == 'KN': 
+        (best_model, best_predicts, best_erro, best_param) = bs.gridKN(trainset,traintarget,valset,valtarget)
+        return best_model
         
-    
     
 def predict(testset,testtarget,model):
   
@@ -90,67 +87,80 @@ def predict(testset,testtarget,model):
 
     return (predicts,erro)
 
+def createmodelAR(trainset,traintarget,dimension):    
+    trainset[dimension+1]=1 
+    coefs = np.linalg.pinv(trainset).dot(traintarget)
+    #print coefs
+    return coefs
 
-"""
-Dimension: ?
+def predictAR(coefs,testset,testtarget,dimension):
+    
+    testset[dimension+1]=1
+    predicts = testset.dot(coefs)
+    erro = metrics.mean_squared_error(testtarget, predicts)
 
-- Valor encontrado através da análise da autocorrelação
-"""
+    return (predicts, erro)
 
 dimension = 13
 datafile = 'airlines2.txt'
 
 (data_set, data_target, val_set, val_target, pred_set, pred_target) = processdata(datafile , dimension)
-"""
+
 #MLP
 
-(data_set, data_target, val_set, val_target, pred_set, pred_target) = processdata(datafile , dimension)
 mlp_reg = createmodel(data_set, data_target, val_set, val_target, 'MLP')
 (pred_mlp, erro_mlp) = predict(pred_set, pred_target, mlp_reg)
 
-mlp = MLPRegressor(hidden_layer_sizes=(100,), activation='relu', solver='lbfgs')
-mlp.fit(data_set,data_target)
-pred_mlp = mlp.predict(pred_set)
-erro_mlp = metrics.mean_squared_error(pred_target, pred_mlp)
+#Kneighbors
 
+kn_reg = createmodel(data_set, data_target, val_set, val_target, 'KN')
+(pred_kn, erro_kn) = predict(pred_set, pred_target, kn_reg)
 
-#RandomForest
+#AutoRegressivo
 
-(data_set, data_target,pred_set, pred_target) = processdata(datafile , dimension, valid=False)
-rf = RandomForestRegressor()
-rf.fit(data_set, data_target)
-(pred_rf, erro_rf) = predict(pred_set, pred_target, rf)
+(train_set, train_target, test_set, test_target) = processdata(datafile, dimension, valid=False)
+coefs = createmodelAR(train_set, train_target, dimension)
+(pred_AR, erro_AR) = predictAR(coefs, test_set, test_target, dimension) 
 
-#RandomForest valid=True
-(data_set, data_target, val_set, val_target, pred_set, pred_target) = processdata(datafile , dimension)
-rf_reg = createmodel(data_set, data_target, val_set, val_target, 'RF')
-(pred_rf, erro_rf) = predict(pred_set, pred_target, rf_reg)
+#Modelo Híbrido - Média
 
-"""
-#SVR
+pred_hmean = (pred_mlp + pred_AR + pred_kn)/3
+erro_hmean = metrics.mean_squared_error(test_target, pred_hmean)
 
-(data_set, data_target, val_set, val_target, pred_set, pred_target) = processdata(datafile , dimension)
-svr_reg = createmodel(data_set, data_target, val_set, val_target,'SVR')
-(pred_svr, erro_svr) = predict(pred_set, pred_target, svr_reg)
+#Modelo Híbrido - Mediana
 
+pred_hmedian = np.median((pred_mlp, pred_AR, pred_kn), axis = 0)
+erro_hmedian = metrics.mean_squared_error(test_target, pred_hmedian)
 
 #Erros
 
-#print 'Mlp ERRO: %.3f' %erro_mlp
-#print 'RandomForest ERRO: %.3f' %erro_rf
-print 'SVR ERRO: %.3f' %erro_svr
+print 'Modelos RNA'
+print 'MlP Erro: %.4f' %erro_mlp
+print 'AR  Erro: %.4f' %erro_AR
+print 'KN  Erro: %.4f +' + '\n' %erro_kn
+
+print 'Modelos Híbridos' + '\n'
+print 'Hmean Erro: %.4f' %erro_hmean 
+print 'Hmedian Erro: %.4f' %erro_hmedian
+
 
 #Plotagem
 x = range(len(pred_target))
 
+#3 Modelos
 plt.plot(x, pred_target, 'r--', label = 'Real')
-#plt.plot(x, pred_mlp, label = 'MLP predicted')
-#plt.plot(x, pred_rf, label = 'RandomForest predicted')
-plt.plot(x, pred_svr, label = 'SVR predicted')
+plt.plot(x, pred_mlp, label = 'MLP predicted')
+plt.plot(x, pred_AR, label = 'AR predicted')
+plt.plot(x, pred_kn, label = 'KN predicted')
 plt.legend()
+plt.figure
 
-
-
+#Modelos Híbridos
+plt.plot(x, pred_target, 'r--', label = 'Real')
+plt.plot(x, pred_hmean, label = 'Hmean')
+plt.plot(x, pred_hmedian, label = 'Hmedian')
+plt.legend()
+plt.figure()
 
 
 
